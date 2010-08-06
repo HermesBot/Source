@@ -1507,65 +1507,45 @@ on *:sockread:*: {
   elseif (tracker.* iswm $sockname) {
     var %t
     sockread %t
-    if (*END* iswm %t) {
+    if (0:-1 == %t) {
       $output($hget($sockname,output) $logo(%cn,Track) $c1(%cn,$hget($sockname,nick)) $c2(%cn,Invalid username))
       hfree $sockname
       sockclose sockname
       halt 
     }
-    if (*START* iswm %t) {
-      var %t
-      sockread %t 
-      if (*start:* iswm %t) {
-        while ($sock($sockname).rq) {
-          if (*started:* iswm %t) {
-            break 
-          } 
-          var %v $replace($v2,:,$chr(32),start,)
-          hadd $sockname $+(start.,$gettok(%v,1,32)) $hget($sockname,$+(start.,$gettok(%v,1,32))) $gettok($v2,3,58)
-          hinc $sockname $+(start.,total) $iif(!$otherstats($v2),$iif($lvl($gettok(%v,2,32)) <= 99,$v1,99))
-          sockread %t 
-        }
+    elseif (start:* iswm %t) {
+      var %v $replace($v2,:,$chr(32),start,)
+      hadd $sockname $+(start.,$gettok(%v,1,32)) $hget($sockname,$+(start.,$gettok(%v,1,32))) $gettok($v2,3,58)
+      hinc $sockname $+(start.,total) $iif(!$otherstats($v2),$iif($lvl($gettok(%v,2,32)) <= 99,$v1,99))
+    }
+    elseif (gain:* iswm %t) {
+      var %v $replace($v2,:,$chr(32),gain,)
+      hadd $sockname $+(gain.,$gettok(%v,1,32)) $hget($sockname,$+(gain.,$gettok(%v,1,32))) $calc($hget($sockname,$+(start.,$gettok(%v,1,32))) - $gettok($v2,4,58))
+      hinc $sockname $+(gain.,total) $iif(!$otherstats($v2),$iif($lvl($calc($hget($sockname,$+(start.,$gettok(%v,1,32))) - $gettok(%v,3,32))) <= 99,$v1,99))
+    }
+    elseif (END == %t) {
+      var %x 2
+      while (%x <= 26) {
+        var %a %a $iif($hget($sockname,$+(start.,$s1(%x))) > $hget($sockname,$+(gain.,$s1(%x))),$+($c2(%cn,$s1(%x)),$c1(%cn,$chr(40)),$c1(%cn,$lvl($hget($sockname,$+(gain.,$s1(%x))))),$&
+          $iif($lvl($hget($sockname,$+(start.,$s1(%x)))) != $lvl($hget($sockname,$+(gain.,$s1(%x)))),$iif($lvl($hget($sockname,$+(start.,$s1(%x)))) > 0,$+(->,$lvl($hget($sockname,$+(start.,$s1(%x))))))),$chr(41)) $&
+          $c2(%cn,$+(+,$bytes($calc($hget($sockname,$+(start.,$s1(%x))) - $hget($sockname,$+(gain.,$s1(%x)))),bd))) $c2(%cn,|))
+        inc %x 
       }
-      if (*started:* iswm %t) {
-        var %t
-        sockread %t 
-        if (*gain:* iswm %t) {
-          while ($sock($sockname).rq) {
-            if (*END* iswm %t) {
-              break 
-            } 
-            var %v $replace($v2,:,$chr(32),gain,)
-            hadd $sockname $+(gain.,$gettok(%v,1,32)) $hget($sockname,$+(gain.,$gettok(%v,1,32))) $calc($hget($sockname,$+(start.,$gettok(%v,1,32))) - $gettok($v2,4,58))
-            hinc $sockname $+(gain.,total) $iif(!$otherstats($v2),$iif($lvl($calc($hget($sockname,$+(start.,$gettok(%v,1,32))) - $gettok(%v,3,32))) <= 99,$v1,99))
-            sockread %t 
-          }
-        }
-        if (*END* iswm %t) {
-          var %x 2
-          while (%x <= 26) {
-            var %a %a $iif($hget($sockname,$+(start.,$s1(%x))) > $hget($sockname,$+(gain.,$s1(%x))),$+($c2(%cn,$s1(%x)),$c1(%cn,$chr(40)),$c1(%cn,$lvl($hget($sockname,$+(gain.,$s1(%x))))),$&
-              $iif($lvl($hget($sockname,$+(start.,$s1(%x)))) != $lvl($hget($sockname,$+(gain.,$s1(%x)))),$iif($lvl($hget($sockname,$+(start.,$s1(%x)))) > 0,$+(->,$lvl($hget($sockname,$+(start.,$s1(%x))))))),$chr(41)) $&
-              $c2(%cn,$+(+,$bytes($calc($hget($sockname,$+(start.,$s1(%x))) - $hget($sockname,$+(gain.,$s1(%x)))),bd))) $c2(%cn,|))
-            inc %x 
-          }
-          if (!$gettok(%a,1-,124)) { 
-            $output($hget($sockname,output) $logo(%cn,Track) $hget($sockname,pnick) has gained no xp over $c2(%cn,$hget($sockname,t)))
-            hfree $sockname
-            sockclose $sockname
-          }
-          var %os $hget($sockname,$+(start.,total)),%og $hget($sockname,$+(gain.,total)),%overall $iif($calc(%os - %og) > 1,$+(+,$v1))
-          $output($hget($sockname,output) $logo(%cn,Track) $C1(%cn,Exp gains for $hget($sockname,pnick)) $c2(%cn,in last $hget($sockname,t)) $&
-            Overall: %overall $iif($calc($hget($sockname,$+(start.,overall)) - $hget($sockname,$+(gain.,overall))) > 1,$c1(%cn,$+(+,$bytes($v1,bd)))) $gettok(%a,1-8,124))
-          $iif($numtok(%a,124) > 8, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,9-17,124)))
-          $iif($numtok(%a,124) > 18, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,18-,124)))
-          $output($hget($sockname,output) $logo(%cn,Graph) $hlink($+(http://runetracker.org/track-,$hget($sockname,nick))))
-          hfree $sockname
-          sockclose $sockname
-          Halt
-        }   
+      if (!$gettok(%a,1-,124)) { 
+        $output($hget($sockname,output) $logo(%cn,Track) $hget($sockname,pnick) has gained no xp over $c2(%cn,$hget($sockname,t)))
+        hfree $sockname
+        sockclose $sockname
       }
-    } 
+      var %os $hget($sockname,$+(start.,total)),%og $hget($sockname,$+(gain.,total)),%overall $iif($calc(%os - %og) > 1,$+(+,$v1))
+      $output($hget($sockname,output) $logo(%cn,Track) $C1(%cn,Exp gains for $hget($sockname,pnick)) $c2(%cn,in last $hget($sockname,t)) $&
+        Overall: %overall $iif($calc($hget($sockname,$+(start.,overall)) - $hget($sockname,$+(gain.,overall))) > 1,$c1(%cn,$+(+,$bytes($v1,bd)))) $gettok(%a,1-8,124))
+      $iif($numtok(%a,124) > 8, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,9-17,124)))
+      $iif($numtok(%a,124) > 18, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,18-,124)))
+      $output($hget($sockname,output) $logo(%cn,Graph) $hlink($+(http://runetracker.org/track-,$hget($sockname,nick))))
+      hfree $sockname
+      sockclose $sockname
+      halt
+    }
   }
   elseif (track.* iswm $sockname) {
     var %r
