@@ -1,17 +1,44 @@
 alias -l locktime return 10
-alias -l spmparam return 10:5
-alias -l release return 0.3.9
+alias -l spmparam return 10:5 
+alias -l release return 0.4
 alias -l exploitcheckup return $regex($1-,/[%$]/)
 alias -l rini return $readini(Default.ini,n,$1,$2)
 alias -l nohtml return $regsubex($1-,/(<[^>]+>)/g,)
+alias -l urlencode return $regsubex($1-,/(\W)/g,$+(%,$base($asc(\1),10,16,2)))
 alias -l logo return $+($c2($1,**),$c1($1,[),$c2($1,$2),$c1($1,]))
+alias requiredfiles return Hermes.txt Params.ini defparams.ini 
 alias -l privatetrigger return $iif($read(settings.txt),$v1,!.~`)
 alias -l publictrigger return $iif($readini(Hermes.ini,settings,publictrig),$v1,@)
 alias Botchan return $remove($readini(Hermes.ini,settings,Botchan),$chr(126))
 alias -l hlink return $regsubex($1-,/((?:http\Q://\E|www\.)\S+)/gi,$+($chr(31),$chr(3),07,\1,$chr(15))) 
 alias -l fname return $replace($regsubex($1-,/^(.)/S,$upper(\t)),$chr(32),$iif($prop,+,$chr(95)))
-alias -l c1 return $+($chr(3),$iif($readini(Hermes.ini,Colour1,$address($1,3)),$v1,14),$2-) 
-alias -l c2 return $+($chr(3),$iif($readini(Hermes.ini,Colour2,$address($1,3)),$v1,$readini(Hermes.ini,n,settings,Colour)),$2-) 
+alias -l c1 {
+  return $+($chr(3),$iif($readini(Hermes.ini,Colour1,$address($1,3)),$v1,14),$2-) 
+}
+alias -l c2 {
+  ;parameters: <nick>
+  var %address $address($1, 3)
+  var %colour $GetColour(%address, 2)
+  return $chr(3) $+ %colour $+ $2-
+}
+alias GetColour {
+  ;parameters: <address mask 3> <number>
+
+  var %address $1
+  var %number $2
+
+  var %colour $readini(Hermes.ini, Colour $+ %number, %address)
+
+  if (%colour == $null) {
+    var %colour $readini(Hermes.ini,n,settings,Colour)
+  }
+
+  if (%colour == $null) {
+    var %colour 10
+  }
+
+  return %colour
+}
 alias Hermes {
   var %n cpanel
   Dialog $iif($dialog(%n),-ve,-md %n) %n
@@ -46,7 +73,7 @@ on *:text:*:*: {
   if ($query($nick)) {
     close -m 
   }
-  if (!$chstop($chan)) && ($regex($1-,/^[!@~.`].+/i)) || ($regex($1-,/http://www.youtube.com/Si)) {
+  if (!$chstop(#)) && ($regex($1-,/^[!@~.`].+/i)) || ($regex($1-,/http://www.youtube.com/Si)) && (!$chstop(#)) {
 
     var %stripcom $regsubex($1,/^[!@~.`]/Sgi,),%command $onoff($pcheck(%stripcom))
     hinc $+(-mu,$token($spmparam,1,58)) aflood $wildsite 1
@@ -157,6 +184,43 @@ on *:text:*:*: {
         else {
           var %n $rp($2)
           $output(%o $logo(%3,Exp) $c1(%3,Exp: %n =) $c2(%3,$lvl(%n)) $iif(%n < 126,$c1(%3,|) $c1(%3,Lvl: %n =) $c2(%3,$bytes($exp(%n),db)))))  
+        }
+      }
+      elseif ($regex($1,/^[ $+ %trigger $+ ]mylist/Si)) {
+        if (!$3) {
+          remini Mylist.ini $address(%3,2) $skill($2)
+          $output(%o $logo(%3,Mylist) paramaters for $c2(%3,$address($nick,2)) $c1(%3,reset))
+        } 
+        elseif ($count($3-,$chr(44)) <= 7) && ($skill($2)) {
+          var %i $numtok($3-,44)
+          var %n 1,%s $skill($2),%skill $iif($regex($skill($2),/(attack|strength|defence)/Si),combat,$skill($2))
+          while (%n <= %i) { 
+            var %item $regsubex($token($3-,%n,44),/^(.)/S,$upper(\t)),%itemlist %itemlist %item $+ $iif(%n < %i,$chr(44))
+            var %str $replace($3-,$chr(44),$chr(64))        
+            if ($regex(%str,/ $+ $token(%str,%n,64) $+ $/gSi) > 1) {
+              var %err repeat
+              break
+            }
+            var %x $+(%item,:,$readini(Params.ini,n,%skill,$replace(%item,$chr(32),_)),`)
+            var %errlist %errlist $iif(!$readini(Params.ini,n,%skill,$replace(%item,$chr(32),_)),$c2(%3,%item) $+ $chr(44))
+            var %err %err $iif(!$readini(Params.ini,n,%skill,$replace(%item,$chr(32),_)),n/a)
+            var %a %a %x
+            inc %n
+          }
+          if (%err == repeat) {
+            $output(%o $logo(%3,Mylist) Do not repeat items $c2(%3,Please try setting your list again))
+          }
+          elseif (*n/a* iswm %err) {
+            $output(%o $logo(%3,Mylist) %errlist $c1(%3,not found) $c2(%3,Please try setting your list again))
+          }
+          elseif (*n/a* !iswm %err) { 
+            writeini Mylist.ini $address(%3,2) %s %a
+            $output(%o $logo(%3,Mylist) set to: $c2(%3,%itemlist) $c1(%3,for) $c2(%3,$address(%3,2)))
+          }
+        }
+        else {
+          $output(%o $logo(%3,Mylist) You must specify 7 items or less $chr(124) $c2(%3,Syntax:) $c1(%3,!mylist skill $str(item $+ $chr(44),6) $+ item) $&
+            $chr(124) $c2(%3,or you can reset skill parameters with:) $c1(%3,!mylist skill default))
         }
       }
       elseif ($regex($1,/^[ $+ %trigger $+ ]rsn/Si)) { 
@@ -485,10 +549,11 @@ on *:text:*:*: {
       }
       elseif ($regex($1,/^[ $+ %trigger $+ ]track/Si)) {
         if (!$skill($2-)) {
-          var %trn $+(tracker.,$right($ticks,5)),%d $iif($rini(Defname,$address($nick,3)),$v1,$nick)
-          hadd -m %trn nick $fname($iif(!$2,%d,$iif(!$3 && $wildtok($2-,@*,1,32),%d,$token($2-,1,64))))
+          var %trn $+(tracker.,$right($ticks,5)),%defname $iif($rini(Defname,$address($nick,3)),$v1,$nick)
+          var %time $mid($wildtok($2-,@*,1,32),2)
+          hadd -m %trn nick $fname($iif(!$2,%defname,$iif(!$3 && %time,%defname,$remove($regsubex($2-,/(.+)@\b/Si,\1),%time))))
           hadd %trn pnick $iif($rini(Privacy,$address($nick,3)) && !$2,Hidden,$hget(%trn,nick))
-          hadd %trn time $duration($iif(!$2 || !$wildtok($2-,@*,1,32),1w,$remove($wildtok($2-,@*,1,32),@))) 
+          hadd %trn time $duration($iif(!$2 || !%time,1w,%time)) 
           hadd %trn t $duration($hget(%trn,time))
           hadd %trn output %o
           hadd %trn colour %3
@@ -551,6 +616,18 @@ on *:text:*:*: {
         hadd %u word $replace($regsubex($2-,/^(.)/S,$upper(\t)),$chr(32),+)
         sockopen %u beardbot.netii.net 80
       }
+      elseif ($regex($1,/^[ $+ %trigger $+ ]weather/Si)) {
+        if ($2) {
+          var %w $+(weather.,$right($ticks,5))
+          hadd -m %w output %o
+          hadd %w colour %3
+          hadd %w location $fname($2-)
+          sockopen %w beardbot.netii.net 80
+        }
+        else {
+          .notice $nick $logo(%3,Weather) $c1(%3,Please specify a location to lookup) 
+        }
+      }
       elseif ($regex($1,/^[ $+ %trigger $+ ](halo|h3)/Si)) {
         if (!$2) && (!$readini(hermes.ini,ConsoleDefname,$address($nick,3))) {
           .notice $nick $logo(%3,Halo3) $c1(%3,Please specify a gamertag to lookup) 
@@ -595,6 +672,18 @@ on *:text:*:*: {
         hadd %gf word1 $2
         hadd %gf word2 $3
         sockopen %gf beardbot.netii.net 80
+      }
+      elseif ($regex($1,/^[ $+ %trigger $+ ]cyborg/Si)) {
+        if ($len($2-) <= 10) { 
+          var %c $+(cyborg.,$right($ticks,5))
+          hadd -m %c output %o
+          hadd %c colour %3
+          hadd %c word $fname($2-)
+          sockopen %c beardbot.netii.net 80
+        }
+        else {
+          .notice $nick $logo(%3,Cyborg) Names can't have more than 10 letters. 
+        }
       }
       elseif ($regex($1,/http://www.youtube.com/Si)) {
         var %yt $+(ytinfo.,$right($ticks,5))
@@ -646,14 +735,14 @@ on *:text:*:*: {
           .notice $nick $logo(define) Please provide something to lookup!
         }
       }
-      elseif ($regex($1,/^[ $+ %trigger $+ ](site|setsite|delsite)$/Si)) {
-        var %ini $readini(Hermes.ini,n,settings,site)
+      elseif ($regex($1,/^[ $+ %trigger $+ ](site|setsite|delsite)/Si)) {
+        var %ini $readini(Hermes.ini,n,chanSite,$chan)
         if ($regml(1) == setsite) {
-          writeini Hermes.ini Settings Site $2-
+          writeini Hermes.ini chanSite $chan $2-
           $output(%o,$logo(%3,Site) Site for $c2(%3,$chan) $c1(%3,set to) $hlink($2-))
         }
         elseif ($regml(1) == delsite) && (%ini) {
-          remini Hermes.ini Settings Site
+          remini Hermes.ini chanSite $chan
           $output(%o,$logo(%3,Site) Site for $c2(%3,$chan) $c1(%3,removed))
         }
         elseif ($regml(1) == site) {
@@ -697,6 +786,14 @@ on *:text:*:*: {
           .notice $nick $logo(%3,8ball) A question needs to be provided for me to give an answer!
         }
       }
+      elseif ($regex($1,/^[ $+ %trigger $+ ]onceaminute/Si)) {
+        if ($hget(timeleft,$nick)) {
+          .notice $nick $c1(%3,Sorry, you need to wait) $c2(%3,$duration($hget(timeleft,$nick))) $c1(%3,before you can do that.)
+          return
+        }
+        $output(%o $c1(%3,Yay you did something that you can only do once a minute!) $c2(%3,YOU ROCK!))
+        hadd -mz timeleft $nick 60
+      }
       elseif ($regex($1,/^[~]go/Si)) && ($chan == $botchan) {
         if ($2 == join) {
           .join $3
@@ -710,11 +807,11 @@ on *:text:*:*: {
       }
       elseif ($regex($1,/^[~](blacklist|bl)/Si)) && ($chan == $botchan) {
         if ($2 == add) {
-          writeini Hermes.ini Blacklist $3 $3
-          .notice $nick $logo(%3,Hermes) Blacklisted $c2(%3,$3) $c1(%3,Reason:) $c2(%3,$iif($4,$4,no reason)) 
+          writeini Hermes.ini Blacklist $3 $4-
+          .notice $nick $logo(%3,Hermes) Blacklisted $c2(%3,$3) $c1(%3,Reason:) $c2(%3,$iif($4,$4-,no reason)) 
         }
         elseif ($2 == del) {
-          remini Hermes.ini Blacklist $3 $3
+          remini Hermes.ini Blacklist $3 
           .notice $nick $logo(%3,Hermes) Removed $c2(%3,$3) $c1(%3,from blacklist)
         }
       }
@@ -784,7 +881,7 @@ on *:sockopen:*: {
     var %path $+(/parsers/compare.php?user1=,$hget($sockname,user1),&user2=,$hget($sockname,user2))
   }
   elseif (%type == alog) {
-    var %path $+(/parsers/alog.php?user=,$hget($sockname,rsn))
+    var %path $+(/private%20parsers/alogtest.php?user=,$hget($sockname,rsn))
   }
   elseif (%type == familiar) {
     var %path $+(/parsers/familiars.php?pouch=,$hget($sockname,familiar))
@@ -834,6 +931,9 @@ on *:sockopen:*: {
   elseif (%type == urban) {
     var %path $+(/parsers/urban.php?term=,$hget($sockname,word))
   }
+  elseif (%type == weather) {
+    var %path $+(/parsers/weather.php?location=,$hget($sockname,location))
+  }
   elseif (%type == halo) {
     var %path $+(/parsers/Halo3.php?player=,$hget($sockname,user))
   }
@@ -842,6 +942,9 @@ on *:sockopen:*: {
   }
   elseif (%type == gf) {
     var %path $+(/parsers/gf.php?&w1=,$hget($sockname,word1),&w2=,$hget($sockname,word2))
+  }
+  elseif (%type == cyborg) {
+    var %path $+(/parsers/cyborg.php?acronym=,$hget($sockname,word))
   }
   elseif (%type == ytinfo) {
     var %path $+(/parsers/ytinfo.php?search=,$hget($sockname,id))
@@ -886,10 +989,10 @@ on *:sockopen:*: {
   elseif (%type == clan) {
     var %path $+(/feeds/lowtech/searchuser.php?user=,$hget($sockname,user),&type=2),%host runehead.com
   }
-  elseif (%type == ml) {
-    var %path $+(/feeds/lowtech/searchclan.php?search=,$hget($sockname,clan),&type=2)
+  elseif (%type == ml) { 
+    var %path $+(/feeds/lowtech/searchclan.php?search=,$hget($sockname,clan)),%host runehead.com
   }
-  elseif (%type == npcid) {
+  elseif (%type == npcid) { 
     var %path $+(/runescape/index.php?rs2monster=&orderby=&keywords=,$hget($sockname,search),&levels=All&race=0),%host www.tip.it
   }
   elseif (%type == npc) {
@@ -1089,6 +1192,12 @@ on *:sockread:*: {
       sockclose $sockname
       halt 
     }
+    if (*unexpected condition* iswm %s) {
+      $output($hget($sockname,output) $logo(%cn,Stats) Due to a technical issue Jagex have caused we are currently unable to process your request)
+      hfree $sockname
+      sockclose $sockname
+      halt 
+    }
     if (*,*,* iswm %s) {
       hinc $sockname snum 1 
       tokenize 44 %s
@@ -1098,13 +1207,14 @@ on *:sockread:*: {
       hadd $sockname $gettok($s1($hget($sockname,snum)),1,32) $iif($hget($sockname,hl),$3,$2)
     }
     elseif ($hget($sockname,snum) >= 23) {
+      hlist $sockname
       var %b $iif($hget($sockname,hl),2,1)
       while (%b <= 26) {
         var %stat $hget($sockname,$gettok($s1(%b),1,32)),%c $token($hget($sockname,elg),2,46),%t $token($hget($sockname,elg),1,46)
-        hadd $sockname statsline $hget($sockname,statsline) $iif(-1 !isin %stat,$+($c1(%cn,$gettok($s1(%b),1,32)),$chr(58),$chr(32),$c2(%cn,%stat),$chr(44),$iif(%b <= 25,$c1(%cn,$chr(124))))))
+        hadd $sockname statsline $hget($sockname,statsline) $iif(-1 !isin %stat,$+($c1(%cn,$gettok($s3(%b),1,32)),$chr(58),$chr(32),$c2(%cn,%stat),$chr(44),$iif(%b <= 25,$c1(%cn,$chr(124))))))
         $iif($hget($sockname,cmb),hadd $sockname cmbline $hget($sockname,cmbline) %stat)
         $iif($hget($sockname,hl),hadd $sockname hline $hget($sockname,hline) $iif(-1 !isin %stat,$+($v2,$chr(96),$gettok($s1(%b),1,32))))
-        $iif($hget($sockname,elg),hadd $sockname elgline $hget($sockname,elgline) $iif(%stat %t %c && -1 !isin %stat,$+($c1(%cn,$gettok($s1(%b),1,32)),$chr(58),$chr(32),$c2(%cn,%stat),$chr(44),$iif(%b <= 25,$c1(%cn,$chr(124)))))) 
+        $iif($hget($sockname,elg),hadd $sockname elgline $hget($sockname,elgline) $iif(%stat %t %c && -1 !isin %stat,$+($c1(%cn,$gettok($s3(%b),1,32)),$chr(58),$chr(32),$c2(%cn,%stat),$chr(44),$iif(%b <= 25,$c1(%cn,$chr(124)))))) 
         inc %b
       }
       if ($hget($sockname,skill)) {
@@ -1127,10 +1237,15 @@ on *:sockread:*: {
       elseif ($hget($sockname,cmb) == yes) {
         tokenize 32 $hget($sockname,cmbline)
         var %cmbstats $2 $4 $3 $5-8 $25
-        $output($hget($sockname,output) $logo(%cn,Combat) $c2(%cn,$hget($sockname,prsn)) $c1(%cn,is level) $c2(%cn,$cmb(%cmbstats)) $c1(%cn,F2P:) $c2(%cn,$gettok($cmb($gettok(%cmbstats,1-7,32)),1,32)) $c1(%cn,ASDCRPM(SU)) $c2(%cn,$remove(%cmbstats,$chr(45))))
-        if ($($+($,nextlevel,$chr(40),%cmbstats,$chr(41),.,%cn),2)) {
-          var %v1 $v1
-          $output($hget($sockname,output) $logo(%cn,Combat) Next level in: %v1)
+        if (-1 -1 -1 -1 -1 -1 -1 -1 !isin %cmbstats) {
+          $output($hget($sockname,output) $logo(%cn,Combat) $c2(%cn,$hget($sockname,prsn)) $c1(%cn,is level) $c2(%cn,$cmb(%cmbstats)) $c1(%cn,F2P:) $c2(%cn,$gettok($cmb($gettok(%cmbstats,1-7,32)),1,32)) $c1(%cn,ASDCRPM(SU)) $c2(%cn,$remove(%cmbstats,$chr(45))))
+          if ($($+($,nextlevel,$chr(40),%cmbstats,$chr(41),.,%cn),2)) {
+            var %v1 $v1
+            $output($hget($sockname,output) $logo(%cn,Combat) Next level in: %v1)
+          }
+        }
+        else { 
+          $output($hget($sockname,output) $logo(%cn,Combat) Combat stats of $c2(%cn,$hget($sockname,rsn)) $c1(%cn,are unranked))
         }
         hfree $sockname
         sockclose $sockname 
@@ -1272,7 +1387,7 @@ on *:sockread:*: {
     var %a
     sockread %a
     if (*@@Not found* iswm %a) {
-      $output($hget($sockname,output) $logo(%cn,Alog) $c2(%cn,$qt($hget($sockname,rsn))) $c1(%cn,does not exist))
+      $output($hget($sockname,output) $logo(%cn,Alog) $c2(%cn,$qt($hget($sockname,rsn))) $c1(%cn,Is either Hidden or does not exist))
       hfree $sockname
       sockclose $sockname
       halt 
@@ -1283,18 +1398,34 @@ on *:sockread:*: {
       sockclose $sockname
       halt 
     }
-    elseif (*ALOG:* iswm %a) {
-      while ($sock($sockname).rq) {
-        if (*End@@* iswm %a) {
-          break 
-        }
-        hadd $sockname info $remove($hget($sockname,info),ALOG:~,.) $+($gettok($v2,1,64),$chr(126))
-        sockread %a
-      }
+    if (*Start:* iswm %a) {
+      $output($hget($sockname,output) $logo(%cn,Alog) Recent Activity for $c2(%cn,$hget($sockname,rsn)) $+ $c1(%cn,:))
     }
-    if (*End@@* iswm %a) {
-      var %b $pos($hget($sockname,info),$chr(126),0)
-      $output($hget($sockname,output) $logo(%cn,Alog) $c2(%cn,$hget($Sockname,rsn)) $c1(%cn,$replace($remtok($hget($sockname,info),$chr(126),%b,126),$chr(126),$chr(44))))
+    elseif (*NPC Kills:* iswm %a) { 
+      var %x $remove(%a,NPC Kills:),%n $numtok(%x,44)
+      $output($hget($sockname,output) $logo(%cn,NPC Kills) $Colour.alog(%cn,$token(%x,1- $+ %n,44)))
+    }
+    elseif (*Player Kills:* iswm %a) {
+      var %x $remove(%a,Player Kills:),%n $numtok(%x,44)
+      $output($hget($sockname,output) $logo(%cn,Player Kills) $Colour.alog(%cn,$token(%x,1- $+ %n,44)))
+    }      
+    elseif (*Levels Gained:* iswm %a) {
+      var %x $remove(%a,Levels Gained:),%n $numtok(%x,44)
+      $output($hget($sockname,output) $logo(%cn,Levels Gained) $Colour.alog(%cn,$token(%x,1- $+ %n,44)))
+    }
+    elseif (*Quests Completed:* iswm %a) {
+      var %x $remove(%a,Quests Completed:),%n $numtok(%x,44)
+      $output($hget($sockname,output) $logo(%cn,Quests Completed:) $Colour.alog(%cn,$token(%x,1- $+ %n,44)))
+    }
+    elseif (*Items Found:* iswm %a) {
+      var %x $remove(%a,Items Found:),%n $numtok(%x,44)
+      $output($hget($sockname,output) $logo(%cn,Items Found:) $Colour.alog(%cn,$token(%x,1- $+ %n,44)))
+    }
+    elseif (*Other:* iswm %a) {
+      var %x $remove(%a,Other:),%n $numtok(%x,44)
+      $output($hget($sockname,output) $logo(%cn,Other) $Colour.alog(%cn,$token(%x,1- $+ %n,44)))
+    }
+    elseif (*:End* iswm %a) {
       hfree $sockname
       sockclose $sockname
     }
@@ -1535,16 +1666,18 @@ on *:sockread:*: {
         $output($hget($sockname,output) $logo(%cn,Track) $hget($sockname,pnick) has gained no xp over $c2(%cn,$hget($sockname,t)))
         hfree $sockname
         sockclose $sockname
+      } 
+      else {
+        var %a $t1(%a),%os $hget($sockname,$+(start.,total)),%og $hget($sockname,$+(gain.,total)),%overall $iif($calc(%os - %og) > 1,$+(+,$v1))
+        $output($hget($sockname,output) $logo(%cn,Track) $c1(%cn,Exp gains for $hget($sockname,pnick)) $c2(%cn,in last $hget($sockname,t)) $&
+          Overall: %overall $iif($calc($hget($sockname,$+(start.,overall)) - $hget($sockname,$+(gain.,overall))) > 1,$c1(%cn,$+(+,$bytes($v1,bd)))) $gettok(%a,1-8,124))
+        $iif($numtok(%a,124) > 8, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,9-17,124)))
+        $iif($numtok(%a,124) > 18, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,18-,124)))
+        $output($hget($sockname,output) $logo(%cn,Graph) $hlink($+(http://runetracker.org/track-,$hget($sockname,nick))))
+        hfree $sockname
+        sockclose $sockname
+        halt
       }
-      var %os $hget($sockname,$+(start.,total)),%og $hget($sockname,$+(gain.,total)),%overall $iif($calc(%os - %og) > 1,$+(+,$v1))
-      $output($hget($sockname,output) $logo(%cn,Track) $C1(%cn,Exp gains for $hget($sockname,pnick)) $c2(%cn,in last $hget($sockname,t)) $&
-        Overall: %overall $iif($calc($hget($sockname,$+(start.,overall)) - $hget($sockname,$+(gain.,overall))) > 1,$c1(%cn,$+(+,$bytes($v1,bd)))) $gettok(%a,1-8,124))
-      $iif($numtok(%a,124) > 8, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,9-17,124)))
-      $iif($numtok(%a,124) > 18, $output($hget($sockname,output) $logo(%cn,Track) $gettok(%a,18-,124)))
-      $output($hget($sockname,output) $logo(%cn,Graph) $hlink($+(http://runetracker.org/track-,$hget($sockname,nick))))
-      hfree $sockname
-      sockclose $sockname
-      halt
     }
   }
   elseif (track.* iswm $sockname) {
@@ -1554,6 +1687,7 @@ on *:sockread:*: {
       $output($hget($sockname,output) $logo(%cn,Track) $c1(%cn,$hget($sockname,nick)) $c2(%cn,Is an invalid username))
       hfree $sockname
       sockclose $sockname
+      halt
     }
     if (*started:* iswm %r) { 
       var %x $gettok(%r,2,58)
@@ -1676,6 +1810,29 @@ on *:sockread:*: {
       sockclose $sockname
     }
   }
+  elseif (weather.* iswm $sockname) {
+    var %w
+    sockread %w
+    if (*@@not found* iswm %w) {
+      $output($hget($sockname,output) $logo(%cn,Weather) Location Not found)
+    }
+    if (*PHP:* iswm %w) {
+      var %category $c1(%cn,$token(%w,2,58))
+      if (*Last Updated* iswmcs %category) { 
+        hadd $sockname ostring 1 
+      }
+      var %i $token(%w,3-,58),$&
+        %info $iif(*Url* iswmcs %category,$hlink(%i),$c2(%cn,%i)),$&
+        %tablename $iif($hget($sockname,ostring),info2,info1)
+      hadd $sockname %tablename $hget($sockname,%tablename) %category $+ $iif(*Weather for* !iswm %category,:) %info
+    }
+    if (*:End* iswm %w) {
+      $output($hget($sockname,output) $logo(%cn,Weather) $hget($sockname,info1))
+      $output($hget($sockname,output) $logo(%cn,Weather) $hget($sockname,info2))
+      hfree $sockname
+      sockclose $sockname
+    }
+  }
   elseif (halo.* iswm $sockname) {
     var %h
     sockread %h
@@ -1759,6 +1916,15 @@ on *:sockread:*: {
       }
     }
   }
+  elseif (Cyborg.* iswm $sockname) {
+    var %c
+    sockread %c
+    if (*CYBORG:* iswm %c) {
+      $output($hget($sockname,output) $logo(%cn,Cyborg) $c2(%cn,$token(%c,2,58) $+ :) $c1(%cn,$token(%c,3-,58)))
+      hfree $sockname
+      sockclose $sockname
+    }
+  }
   elseif (ytinfo.* iswm $sockname) { 
     var %y
     sockread %y
@@ -1834,14 +2000,9 @@ on *:sockread:*: {
     var %b
     sockread %b
     if (*LAST TWEET:* iswm %b) {
-      if (%b != $hget(Botnews,latest)) && ($readini(Hermes.ini,settings,Botnews) == 1) {
-        var %n $chan(0)
-        hadd -m Botnews latest %b
-        while (%n) { 
-          var %s $logo(%cn,Bot News) $gettok(%b,2-,58)
-          $iif(!$chstop($chan(%n)),.msg $chan(%n) $iif(c isincs $chan(%n).mode,$strip(%s),%s))
-          dec %n 
-        }
+      if (%b != $readini(Hermes.ini,n,Botnews,latest)) && ($readini(Hermes.ini,settings,Botnews) == 1) {
+        writeini Hermes.ini Botnews latest %b
+        .msg $botchan $logo(%cn,Bot News) $gettok(%b,2-,58)       
         sockclose $sockname
       }
     }
@@ -1913,6 +2074,12 @@ on *:signal:updatecheck: {
 ctcp *:hermes:?: { 
   .ctcp $nick beard-bot.co.uk Hermes Version: $release
 }
+alias Colour.alog {
+  var %n $1,%x $regsubex($2-,/(\d+|\d+.)x/Sig,$c2(%n,\1 $+ x) $+ $c1(%n))
+  var %y $regsubex(%x,/(\d+.)XP/Sig,$c2(%n,$bytes($strip(\1),bd) $+ xp) $+ $c1(%n))
+  var %z $regsubex(%y,/\s(\d+)\s/g,$chr(32) $+ $c2(%n,\1) $c1(%n))
+  return $replace(%z,[,$c1(%n) $+ [ $+ $c2(%n),],$c1(%n) $+ ]) 
+}
 alias -l rp { 
   ;Calculates an equation & replaces abbreviations for large numbers
   var %a $remove($1,$chr(44))
@@ -1937,6 +2104,13 @@ alias -l s1 {
 alias -l s2 {
   ;Returns number based on skill name
   return $findtok(attack.defence.strength.Constitution.ranged.prayer.magic.cooking.woodcutting.fletching.fishing.firemaking.crafting.smithing.mining.herblore.agility.thieving.slayer.farming.runecraft.hunter.construction.summoning.dungeoneering,$1,1,46)
+}
+alias -l s3 {
+  ;Returns shortened skill names based on number
+  return $gettok(Overall.Att.Def.Str.Cns.Range.Pray.Mage.Cook.Wc.Fletch.Fish.Fm.Craft.Smith.Mine.Herb.Agil.Thieve.Slay.Farm.Rc.Hunt.Con.Summ.Dung.Duel.Bounty.Bounty-Rogue.FOG.BA-Att.BA-Def.BA-Coll.BA-Heal.CW,$1,46)
+}
+alias -l t1 {
+  return $replace($1,Attack,Att,Defence,Def,Strength,Str,Constitution,Cns,Ranged,Range,Prayer,Pray,Magic,Mage,Cooking,Cook,Woodcutting,Wc,Fletching,Fletch,Fishing,Fish,Firemaking,Fm,Crafting,Craft,Smithing,Smith,Mining,Mine,Herblore,Herb,Agility,Agil,Thieving,Thiev,Slayer,Slay,Farming,Farm,Runecraft,Rc,Hunter,Hunt,Construction,Con,Summoning,Summ,Dungeoneering,Dung)
 }
 alias -l lvl {
   ;Returns Level based on experience
@@ -2055,248 +2229,31 @@ alias -l skill {
 }
 alias -l skillparams {
   ;$1 nickforcolours, $2 skill, $3 xptillnxt,$4 current level
-  var %b $c1($1,|),%cn $1
-  if ($regex($2,/^(attack|strength|defence|combat)/Si)) {
-    ;combat paramater values
-    var %params Shadow Warriors:268`Dagganoth(74):280`Yaks:200`Bandits:204 $&
-      `Armoured Zombies:340`Orgres:240`Green Dragons:300`Dust Devils:420`Fire Giants:444
+  var %b $c1($1,|),%cn $1,%skill $iif($regex($2,/^(attack|strength|defence)/Si),combat,$2)
+  var %defparams $readini(defparams.ini,n,params,%skill)
+  var %params $iif($readini(Mylist.ini,n,$address($1,2),$2),$v1,$iif(%skill == Magic,$+(%defparams,`,$lvlspell($3),$iif($3 >= 70,`Ice burst:40),$iif($3 >= 94,`Ice barrage:52)),%defparams))
+  if ($2 != Summoning) {
     var %n $numtok(%params,96),%x 1,%xptillnxt $3
     while (%x <= %n) {
       tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
+      var %div1 $iif(%skill != Smithing,[.]),%div3 $iif(%skill == Smithing,$c1(%cn,/))
+      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $+ $iif($token($2,2,32),%div3) $&
+        $iif($v1,$c2(%cn,$+($token(%div1,1,46),$bytes($ceil($calc(%xptillnxt / $v1)),db),$token(%div1,2,46)))) $+ $iif($token($2,3,32),%div3) $&
+        $iif($v1,$c2(%cn,$+($token(%div1,1,46),$bytes($ceil($calc(%xptillnxt / $v1)),db),$token(%div1,2,46)))) $iif(%x != %n,%b)
       inc %x
     }
-    return %a
+    var %txt $iif(%skill == Prayer,Buried $c2(%cn,[Ecto] [Altar]),$iif(%skill == Ranged,NPC [cannon],$iif(%skill == Smithing,$+($c2(%cn,Smelt),$c1(%cn,/),$c2(%cn,Smith),$c1(%cn,/),$c2(%cn,Both))))) 
+    return %txt %a 
   }
-  elseif ($2 == Constitution) {
-    var %params Shadow Warriors:89.33`Dagganoth:93.33`Yaks:66.66`Bandits:68 $&
-      `Armoured Zombies:113.33`Orgres:80`Green Dragons:100`Dust Devils:140`Fire Giants:148
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Ranged) {
-    ;normal-xp cannoned-xp
-    var %params Dagannoth:396 198`Yaks:200 100`Bandits:204 102`Hellhounds:464 232 $&
-      `Ogres:240 120`Blue dragons:436 218`Monkey Guard:520 260`Firegiants:444 222
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $token($2,1,32))),db)) $&
-        $+($c2(%cn,[),$c1(%cn,$bytes($ceil($calc($2 / $token(%xptillnxt,2,32))),db)),$c2(%cn,])) $iif(%x != %n,%b)
-      inc %x
-    }
-    return $+($c2(%cn,[),$c1(%cn,Cannon),$c2(%cn,])) %a
-  }
-  elseif ($2 == Prayer) {
-    ;Prayer Paramaters
-    var %params Bones:4.5`Big bones:15`Baby dragon bones:30`Dragon bones:72`[Altar:252`[Ecto:288`Dagannoth bones:125
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $+($c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)),$iif(%x isnum 5-6,$c1(%cn,]))) $&
-        $iif(%x != %n && %x !isnum 4-5,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Magic) {
-    var %params $+(Curse:29`Stun:90`High alch:65`Humidify:65`Camelot teleport:55.5`,$lvlspell($3),$iif($3 >= 70,`Ice burst:40),$iif($3 >= 94,`Ice barrage:52))
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Cooking) {
-    var %params Trout:70`Salmon:90`Tuna:100`Lobster:120`Swordfish:140`Monkfish:150`Shark:210`Curry:280
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Woodcutting) {
-    var %params Normal logs:25`Oak logs:37.5`Willow logs:67.5`Teak logs:85`Maple logs:100 $&
-      `Mahogany logs:125`Eucalyptus logs:165`Yew logs:175`Mage logs:250
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Fletching) {
-    var %params Maple longbow:116.6`Adamant arrows:10`Yew shortbow:133 $& 
-      `Yew longbow:150`Mage shortbow:166.6`Mage longbow:183
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Fishing) {
-    var %params Salmon:70`Tuna:80`Lobster:90`Bass:100`Swordfish:100`Shark:110`Monkfish:120
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Firemaking) {
-    var %params Normal logs:40`Oak logs:60`Willow logs:90`Maple logs:135`Yew logs:202.5`Magic logs:303.75
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == crafting) {  
-    var %params Hard Leather Body:35,Glass orb:52.5`Tiara:52.5`Green d'hide:62`Blue d'hide:70`Black d'hide:79
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Smithing) {
-    ;smelt smith both
-    var %params Iron:12.5 25 37.5`Steel:17.5 37.5 55`Mithril:30 50 80`Adamant:37.5 62.5 100 $&
-      `Gold:22.5 56.2`Adamant Platebodies:312.5`Cannon balls:43.1
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $iif(%x isnum 1-4,$c1(%cn,$1) $+($c2(%cn,$bytes($ceil($calc(%xptillnxt / $token($2,1,32))),db)),$&
-        $c1(%cn,/),$c2(%cn,$bytes($ceil($calc(%xptillnxt / $token($2,2,32))),db)),$c1(%cn,/),$&
-        $c2(%cn,$bytes($ceil($calc(%xptillnxt / $token($2,3,32))),db))),$iif(%x isnum 5,$c1(%cn,Smelt Gold) $&
-        $c2(%cn,$bytes($ceil($calc(%xptillnxt / $token($2,1,32))),db)) $c1(%cn,(w/Gaunts)) $&
-        $c2(%cn,$bytes($ceil($calc(%xptillnxt / $token($2,2,32))),db)),$c1(%cn,$1) $&
-        $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)))) $iif(%x != %n,%b)
-      inc %x
-    }
-    return $+($c1(%cn,[),$c2(%cn,smelt),$c1(%cn,/),$c2(%cn,smith),$c1(%cn,/),$c2(%cn,both),$c1(%cn,]),$c1(%cn,:)) %a
-  }
-  elseif ($2 == mining) {
-    var %params Iron:35`Mithril:80`Adamant:95`Rune:125 $&
-      `Silver:40`Gems:65`Granite:61.67`Coal:50`Pure essence:5
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Herblore) {
-    var %params Prayer:87.5`Super attack:100`Super strength:125`Super restore:142.5 $&
-      `Super energy:117.5`Fishing:112.5`Hunter:120`Ranging:162.5`Magic:172.5`Saradomin brew:180
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Agility) {
-    var %params Gnome:86`Barbarian:153.2`Werewolf:540,Wilderness:571.5 $&
-      `Ape Atoll:580`Dorgesh-Kaan:1375`Pyramid:1014`Brimhaven (100):30800
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Thieving) {
-    var %params Warriors:26`Master farmers:43`Guards:46.8`Fremenniks:65`Knights:84.3`Paladins:151.8`Heroes:273.3
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Slayer) {
-    var %params Dagannoths:99`Greater demons:87`Kalphites:90`Trolls:90`Gargoyles:105 $&
-      `Nechryael:105`Bloodveld:120`Black demons:157`Abyssal demon:150`Iron dragon:173`Steel dragon:220
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Farming) {
-    var %params Ranarr:57.5`Kwuarm:147`Willow tree:1481.3`Maple tree:3448.4 $&
-      `Pineapple:4684.2`Papaya:6245.4`Yew tree:7150.9`Calquat:12274`Palm tree:10302.1
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Runecraft) {
-    var %params Air: 5`Water:6`Earth:6.5`Fire:7`Chaos:8.5`Nature:9`Law:9.5`Death:10`Blood:11`ZMI:17.3
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Hunter) {
-    var %params Dark Kebbit:132`Dashing Kebbit:156`Kyatt:300`Orange Salamander:224 $&
-      `Red Salamander:272`Red Chinchompa:265`Razor-backed Kebbit:348`Imp:450
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == construction) {
-    var %params Normal planks:25`Oak planks:60`Teak planks:90`Mahogany planks:140`Oak larder:480
-    var %n $numtok(%params,96),%x 1,%xptillnxt $3
-    while (%x <= %n) {
-      tokenize 58 $token(%params,%x,96)
-      var %a %a $c1(%cn,$1) $c2(%cn,$bytes($ceil($calc(%xptillnxt / $2)),db)) $iif(%x != %n,%b)
-      inc %x
-    }
-    return %a
-  }
-  elseif ($2 == Summoning) {
-    var %x Gold Crimson Green Blue,%n 4,%l 1
+  else {
+    var %mylist $readini(Mylist.ini,n,$address($1,2),$2)
+    var %x Gold Crimson Green Blue,%n $iif(%mylist,$numtok(%params,96),4),%l 1
     while (%l <= %n) {
-      var %info $($+($,makewhat,$chr(40),$4,$chr(41),.,$gettok(%x,%l,32)),2),$&
-        %exp $gettok(%info,6,64),%shards $gettok(%info,5,64),%name $gettok(%info,2,64),$&
-        %charm $replace($gettok(%x,%l,32),Gold,07Gold,Crimson,04Crimson,Blue,02Blue,Green,03Green)
+      var %params $iif(%mylist,$token(%mylist,%l,96),$($+($,makewhat,$chr(40),$4,$chr(41),.,$token(%x,%l,32)),2)),$&
+        %exp $token(%params,6,64),%shards $token(%params,5,64),%name $token(%params,2,64),$&
+        %charm $replace($iif(%mylist,$token(%params,3,64),$token(%x,%l,32)),Gold,07Gold,Crimson,04Crimson,Blue,02Blue,Green,03Green)
       var %a %a $c2(%cn,%name) $+($c1(%cn,[),$bytes($ceil($calc($3 / %exp)),bd),x,%charm,$c1(%cn,])) $&
-        $+([S:,$bytes($ceil($calc(($3 /%exp) * %shards)),bd),]) $iif(%l != 4,%b)
+        $+([S:,$bytes($ceil($calc(($3 /%exp) * %shards)),bd),]) $iif(%l != %n,%b)
       inc %l
     }
     return %a
@@ -2446,7 +2403,9 @@ alias rings {
   elseif ($regex($1-,/(^DKR$)|Edge(ville)?|G(rand)?E(xchange)?/i)) return DKR@Misthalin: EdgeVille and GrandExchange  
   elseif ($regex($1-,/(^DKS$)|(Snow(y)?|Polar) Hunt(er)?/i)) return DKS@Kandarin: Snowy/Polar Hunder Area 
   elseif ($regex($1-,/(^DLQ$)|(Desert)?Lizard(s)?|Nardah|Ruin(s)?Uzer/i)) return DLQ@Kharidian: Desert Lizards, Nardah, Ruins Uzer 
-  elseif ($regex($1-,/(^DLS$)|Myreque Hidout|Hollow(s)?|Blood( Alt(a|e)r)?/i)) return DLS@Myreque: Hollows and Blood Alter 
+  elseif ($regex($1-,/(^DLS$)|Myreque Hidout|Hollow(s)?|Blood( Alt(a|e)r)?/i)) return DLS@Myreque: Hollows and Blood Alter
+  elseif ($regex($1-,/(^DIP$)|Mos(Le'Harmless)?|Cave(Horror)?$/i)) return DIP@Mos Le'Harmless: Island South Of Cave Horrors
+  elseif ($regex($1-,/(^CLR$)|ape atol?|atol?/i)) return CLR@Ape Atoll: agility course
   else return Error
 }
 alias onoff {
@@ -2486,9 +2445,11 @@ alias onoff {
   elseif ($regex($1,/fml$/Si)) return fml
   elseif ($regex($1,/bash$/Si)) return bash
   elseif ($regex($1,/(urban|ud)$/Si)) return urban
+  elseif ($regex($1,/weather$/Si)) return weather
   elseif ($regex($1,/(halo|h3)$/Si)) return halo 
   elseif ($regex($1,/(xbl|gc)$/Si)) return xbl
   elseif ($regex($1,/(gf|googlefight)$/Si)) return gf
+  elseif ($regex($1,/cyborg$/Si)) return cyborg
   elseif ($regex($1,/(yt|youtube)$/Si)) return youtube
   elseif ($regex($1,/google$/Si)) return google
   elseif ($regex($1,/site$/Si)) return site
@@ -2497,6 +2458,7 @@ alias onoff {
   elseif ($regex($1,/wave$/Si)) return wave
   elseif ($regex($1,/food$/Si)) return food
   elseif ($regex($1,/8ball$/Si)) return 8ball
+  elseif ($regex($1,/onceaminute$/Si)) return onceaminute
   elseif ($regex($1,/calc(ulator)$/Si)) return calculator
 }
 alias -l pcheck { 
@@ -2528,10 +2490,10 @@ dialog cpanel {
   text "Invite message", 12, 104 70 37 12
   check "Auto Bot news", 13, 92 12 50 10
   edit "", 14, 12 83 20 12, autohs
-  text "Public Trigger", 15, 35 85 37 12
+  text "Public Prefix", 15, 35 85 37 12
   edit "", 16, 70 83 20 12, autohs
-  text "Private Trigger", 17, 93 85 37 12
-  button "Update", 18, 54 100 37 12, ok
+  text "Private Prefix", 17, 93 85 37 12
+  button "Update", 18, 54 100 37 12, cancel
 }
 
 On *:dialog:cpanel:init:*: {
