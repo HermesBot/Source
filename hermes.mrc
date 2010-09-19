@@ -7,15 +7,15 @@ alias -l nohtml return $regsubex($1-,/(<[^>]+>)/g,)
 alias -l urlencode return $regsubex($1-,/(\W)/g,$+(%,$base($asc(\1),10,16,2)))
 alias -l logo return $+($c2($1,**),$c1($1,[),$c2($1,$2),$c1($1,]))
 alias requiredfiles return Hermes.txt Params.ini defparams.ini 
-alias -l privatetrigger return $iif($read(settings.txt),$v1,!.~`)
-alias -l publictrigger return $iif($readini(Hermes.ini,settings,publictrig),$v1,@)
+alias privatetrigger return $iif($readini(Hermes.ini, Settings, PrivateTrigger),$v1,!.~`)
+alias publictrigger return $iif($readini(Hermes.ini,settings,publictrig),$v1,@)
 alias Botchan return $remove($readini(Hermes.ini,settings,Botchan),$chr(126))
 alias -l hlink return $regsubex($1-,/((?:http\Q://\E|www\.)\S+)/gi,$+($chr(31),$chr(3),07,\1,$chr(15))) 
 alias -l fname return $replace($regsubex($1-,/^(.)/S,$upper(\t)),$chr(32),$iif($prop,+,$chr(95)))
-alias -l c1 {
+alias c1 {
   return $+($chr(3),$iif($readini(Hermes.ini,Colour1,$address($1,3)),$v1,14),$2-) 
 }
-alias -l c2 {
+alias c2 {
   ;parameters: <nick>
   var %address $address($1, 3)
   var %colour $GetColour(%address, 2)
@@ -2493,7 +2493,7 @@ dialog cpanel {
   text "Public Prefix", 15, 35 85 37 12
   edit "", 16, 70 83 20 12, autohs
   text "Private Prefix", 17, 93 85 37 12
-  button "Update", 18, 54 100 37 12, cancel
+  button "Update", 18, 54 100 37 12
 }
 
 On *:dialog:cpanel:init:*: {
@@ -2504,23 +2504,26 @@ On *:dialog:cpanel:init:*: {
   didtok $dname 10 96 $remove($readini(Hermes.ini,settings,invmsg),$chr(126))
   did $iif($readini(Hermes.ini,settings,Botnews) == 1,-c,-u) $dname 13 
   didtok $dname 14 124 $iif($readini(Hermes.ini,settings,publictrig),$v1,@)
-  didtok $dname 16 124 $iif($read(settings.txt),$v1,!.~`)
+  didtok $dname 16 124 $PrivateTrigger
 }
 On *:dialog:cpanel:sclick:5: {
   writeini Hermes.ini Settings Colour $iif($did(4).seltext,$v1,13)
   writeini Hermes.ini Settings Botchan $did(2) 
   writeini Hermes.ini Settings Homechan $did(3) 
   writeini Hermes.ini Settings noreply $didtok(9,32)
-  writeini Hermes.ini Settings invmsg $didtok(10,32)
+  var %invMsg $didtok(10,32)
+  if (%invMsg != $null) {
+    writeini Hermes.ini Settings invmsg $didtok(10,32)
+  }
   writeini Hermes.ini Settings Botnews $did(13).state
   writeini Hermes.ini Settings publictrig $left($didtok(14,32),1)
-  write settings.txt $did(16)
+  writeini Hermes.ini Settings PrivateTrigger $did(16)
   $iif($did(13).state == 1,/timerbotnews 0 $duration(1d) sockopen $+(botnews.,$right($ticks,5)) $&
     beardbot.netii.net 80,/timerbotnews off)
 }
 On *:dialog:cpanel:sclick:18: {
   if ($isalias(update)) {
-    var %v $+(version.,$right($ticks,5))
+    var -s %v $+(version.,$right($ticks,5))
     hadd -m %v update y
     sockopen %v beardbot.netii.net 80  
   }
